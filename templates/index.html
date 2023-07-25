@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplicação Python com Flask</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/instascan/1.0.1/instascan.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+    <style>
+        /* Estilo personalizado para melhorar a visualização */
+        .form-container {
+            margin-bottom: 20px;
+        }
+
+        .input-container {
+            display: flex;
+            align-items: center;
+        }
+
+        .input-container label {
+            margin-right: 10px;
+        }
+
+        #itens_list {
+            margin-top: 10px;
+        }
+
+        #itens_list div {
+            margin-bottom: 5px;
+        }
+
+        #gerar_csv_container {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <a href="#" onclick="showForm('baixa_itens_form')">Baixa por itens</a>
+        <a href="#" onclick="showForm('baixa_kits_form')">Baixa de Kits</a>
+        <a href="#" onclick="showForm('cautela_ferramentas_form')">Cautela de Ferramentas</a>
+    </div>
+
+    <div style="margin-left: 200px; padding: 20px;">
+        <h1>Gerenciamento de Estoque</h1>
+
+        <!-- Formulário para Baixa por itens -->
+        <div class="form-container" id="baixa_itens_form">
+            <form class="form">
+                <div class="form-title">Baixa por itens</div>
+                <div class="input-container">
+                    <label for="item_codigo">Código do Item:</label>
+                    <input type="text" id="item_codigo" name="item_codigo" required placeholder="Digite o Código do Item" onblur="fetchItemDescription()">
+                    <span class="input-icon"><i class="fas fa-barcode"></i></span>
+                    <button class="camera-btn" onclick="openCamera()"><i class="fas fa-camera"></i></button>
+                </div>
+
+                <div class="input-container">
+                    <label for="item_descricao">Descrição:</label>
+                    <span id="item_descricao"></span>
+                </div>
+                <div class="input-container">
+                    <label for="item_quantidade">Quantidade:</label>
+                    <input type="number" id="item_quantidade" name="item_quantidade" required placeholder="Digite a Quantidade">
+                    <span class="input-icon"><i class="fas fa-sort-numeric-up"></i></span>
+                </div>
+                <button class="submit" type="button" onclick="addItem()">Adicionar Item</button>
+            </form>
+
+            <!-- Lista de Itens Adicionados -->
+            <div class="itens-list-container">
+                <div class="form-title">Itens Adicionados</div>
+                <div id="itens_list" class="itens-list"></div>
+            </div>
+        </div>
+
+        <!-- Botão para Gerar CSV -->
+        <div class="form-container" id="gerar_csv_container" style="display: none;">
+            <button class="submit" type="button" onclick="generateCSV()">Gerar CSV</button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <img src="logo2.jpg" alt="Logo da Aplicação">
+    </div>
+
+    <script>
+        let scannerInstance;
+
+        function fetchItemDescription() {
+            const codigo = document.getElementById("item_codigo").value;
+
+            // Fazer a requisição para buscar a descrição do item pelo código
+            fetch("/buscar_descricao", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ codigo: codigo })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const descricao = data.descricao;
+                    document.getElementById("item_descricao").textContent = descricao;
+                } else {
+                    document.getElementById("item_descricao").textContent = "";
+                    alert("Código não encontrado.");
+                }
+            })
+            .catch(error => {
+                console.error("Erro na solicitação AJAX:", error);
+            });
+        }
+
+        const itensList = [];
+
+        function addItem() {
+            const codigo = document.getElementById("item_codigo").value;
+            const descricao = document.getElementById("item_descricao").textContent;
+            const quantidade = document.getElementById("item_quantidade").value;
+
+            if (codigo.trim() === "" || descricao.trim() === "" || quantidade.trim() === "") {
+                alert("Por favor, preencha todos os campos.");
+                return;
+            }
+
+            itensList.push({ codigo, descricao, quantidade });
+            showItensList();
+
+            document.getElementById("item_codigo").value = "";
+            document.getElementById("item_descricao").textContent = "";
+            document.getElementById("item_quantidade").value = "";
+        }
+
+        function showItensList() {
+            const itensListContainer = document.querySelector(".itens-list-container");
+            itensListContainer.style.display = "block";
+
+            const itensListDiv = document.getElementById("itens_list");
+            itensListDiv.innerHTML = "";
+
+            for (const item of itensList) {
+                const itemDiv = document.createElement("div");
+                itemDiv.textContent = `Código: ${item.codigo}, Descrição: ${item.descricao}, Quantidade: ${item.quantidade}`;
+                itensListDiv.appendChild(itemDiv);
+            }
+
+            const gerarCsvContainer = document.getElementById("gerar_csv_container");
+            gerarCsvContainer.style.display = itensList.length > 0 ? "block" : "none";
+        }
+
+        function generateCSV() {
+            if (itensList.length === 0) {
+                alert("Nenhum item foi adicionado.");
+                return;
+            }
+
+            fetch("/gerar_csv", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ itensList: itensList }),
+            })
+            .then((response) => response.blob())
+            .then((blob) => {
+                const url = window.URL.createObjectURL(new Blob([blob]));
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "itens.csv";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            })
+            .catch((error) => {
+                console.error("Erro na solicitação AJAX:", error);
+            });
+        }
+
+        function openCamera() {
+            // Verificar se o navegador suporta a API do WebRTC
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                // Pedir permissão para acessar a câmera
+                navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function (stream) {
+                    // Exibir a câmera em um elemento de vídeo
+                    const video = document.createElement('video');
+                    video.srcObject = stream;
+                    video.play();
+
+                    // Criar a instância do scanner Instascan
+                    scannerInstance = new Instascan.Scanner({ video: video });
+
+                    // Capturar o QR code quando o usuário clicar no botão "Adicionar Item"
+                    document.querySelector('.submit').addEventListener('click', function () {
+                        // Escutar o evento "scan" para ler o QR code
+                        scannerInstance.addListener('scan', function (content) {
+                            // Se um QR code foi lido, preencha o input de código com o valor do QR code
+                            document.getElementById('item_codigo').value = content;
+                            // Chame a função para buscar a descrição do item automaticamente (opcional)
+                            fetchItemDescription();
+                        });
+
+                        // Iniciar o scanner para começar a escutar os QR codes
+                        Instascan.Camera.getCameras()
+                        .then(function (cameras) {
+                            if (cameras.length > 0) {
+                                scannerInstance.start(cameras[0]); // Use a câmera traseira (cameras[1] para câmera frontal)
+                            } else {
+                                console.error('Nenhuma câmera encontrada.');
+                            }
+                        })
+                        .catch(function (error) {
+                            console.error('Erro ao acessar a câmera:', error);
+                        });
+
+                        // Parar o stream de vídeo e esconder o elemento de vídeo
+                        stream.getTracks().forEach(track => track.stop());
+                        video.remove();
+                    });
+
+                    // Adicionar o elemento de vídeo à página para exibir a câmera
+                    const cameraContainer = document.createElement('div');
+                    cameraContainer.appendChild(video);
+                    document.body.appendChild(cameraContainer);
+                })
+                .catch(function (error) {
+                    console.error('Erro ao acessar a câmera:', error);
+                });
+            } else {
+                alert('Seu navegador não suporta a API do WebRTC para acessar a câmera.');
+            }
+        }
+
+        function showForm(formId) {
+            const forms = document.getElementsByClassName("form-container");
+            for (const form of forms) {
+                form.style.display = form.id === formId ? "block" : "none";
+            }
+
+            const buttons = document.getElementsByClassName("sidebar")[0].getElementsByTagName("button");
+            for (const button of buttons) {
+                button.classList.remove("active");
+            }
+
+            const currentButton = document.querySelector(`[onclick="showForm('${formId}')"]`);
+            currentButton.classList.add("active");
+        }
+    </script>
+</body>
+</html>
