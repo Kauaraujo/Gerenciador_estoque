@@ -1,11 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, json
 import mysql.connector
-from flask_socketio import SocketIO
 import hashlib
 import csv
 
 app = Flask(__name__)
-socketio = SocketIO(app)
 
 itensList = []
 
@@ -198,4 +196,4 @@ def gerar_csv():
 
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    app.run(debug=True)

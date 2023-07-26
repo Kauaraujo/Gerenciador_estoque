@@ -34,6 +34,22 @@
         #gerar_csv_container {
             margin-top: 20px;
         }
+
+        /* Estilo para centralizar a câmera no contêiner */
+        #scanner-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 30vh; /* Reduzindo para 30% da altura da tela */
+        }
+
+        /* Estilo para ajustar o tamanho do vídeo */
+        #scanner-video {
+            max-width: 100%;
+            max-height: 100%;
+            border: 2px solid white;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -54,7 +70,7 @@
                     <label for="item_codigo">Código do Item:</label>
                     <input type="text" id="item_codigo" name="item_codigo" required placeholder="Digite o Código do Item" onblur="fetchItemDescription()">
                     <span class="input-icon"><i class="fas fa-barcode"></i></span>
-                    <button class="camera-btn" onclick="openCamera()"><i class="fas fa-camera"></i></button>
+                    <button class="camera-btn" onclick="toggleCamera()"><i class="fas fa-camera"></i></button>
                 </div>
 
                 <div class="input-container">
@@ -80,6 +96,9 @@
         <div class="form-container" id="gerar_csv_container" style="display: none;">
             <button class="submit" type="button" onclick="generateCSV()">Gerar CSV</button>
         </div>
+
+        <!-- Contêiner para a Câmera -->
+        <div id="scanner-container" style="display: none;"></div>
     </div>
 
     <!-- Footer -->
@@ -89,6 +108,7 @@
 
     <script>
         let scannerInstance;
+        let scannerOpen = false;
 
         function fetchItemDescription() {
             const codigo = document.getElementById("item_codigo").value;
@@ -181,6 +201,14 @@
             });
         }
 
+        function toggleCamera() {
+            if (scannerOpen) {
+                closeCamera();
+            } else {
+                openCamera();
+            }
+        }
+
         function openCamera() {
             // Verificar se o navegador suporta a API do WebRTC
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -189,44 +217,25 @@
                 .then(function (stream) {
                     // Exibir a câmera em um elemento de vídeo
                     const video = document.createElement('video');
+                    video.id = 'scanner-video';
                     video.srcObject = stream;
                     video.play();
 
-                    // Criar a instância do scanner Instascan
+                    // Iniciar o scanner para começar a escutar os QR codes
                     scannerInstance = new Instascan.Scanner({ video: video });
-
-                    // Capturar o QR code quando o usuário clicar no botão "Adicionar Item"
-                    document.querySelector('.submit').addEventListener('click', function () {
-                        // Escutar o evento "scan" para ler o QR code
-                        scannerInstance.addListener('scan', function (content) {
-                            // Se um QR code foi lido, preencha o input de código com o valor do QR code
-                            document.getElementById('item_codigo').value = content;
-                            // Chame a função para buscar a descrição do item automaticamente (opcional)
-                            fetchItemDescription();
-                        });
-
-                        // Iniciar o scanner para começar a escutar os QR codes
-                        Instascan.Camera.getCameras()
-                        .then(function (cameras) {
-                            if (cameras.length > 0) {
-                                scannerInstance.start(cameras[0]); // Use a câmera traseira (cameras[1] para câmera frontal)
-                            } else {
-                                console.error('Nenhuma câmera encontrada.');
-                            }
-                        })
-                        .catch(function (error) {
-                            console.error('Erro ao acessar a câmera:', error);
-                        });
-
-                        // Parar o stream de vídeo e esconder o elemento de vídeo
-                        stream.getTracks().forEach(track => track.stop());
-                        video.remove();
+                    scannerInstance.addListener('scan', function (content) {
+                        // Se um QR code foi lido, preencha o input de código com o valor do QR code
+                        document.getElementById('item_codigo').value = content;
+                        // Chame a função para buscar a descrição do item automaticamente (opcional)
+                        fetchItemDescription();
                     });
+                    scannerInstance.start();
+                    scannerOpen = true;
 
                     // Adicionar o elemento de vídeo à página para exibir a câmera
-                    const cameraContainer = document.createElement('div');
-                    cameraContainer.appendChild(video);
-                    document.body.appendChild(cameraContainer);
+                    const scannerContainer = document.getElementById('scanner-container');
+                    scannerContainer.style.display = 'block';
+                    scannerContainer.appendChild(video);
                 })
                 .catch(function (error) {
                     console.error('Erro ao acessar a câmera:', error);
@@ -234,6 +243,15 @@
             } else {
                 alert('Seu navegador não suporta a API do WebRTC para acessar a câmera.');
             }
+        }
+
+        function closeCamera() {
+            if (scannerInstance) {
+                scannerInstance.stop();
+            }
+            const scannerContainer = document.getElementById('scanner-container');
+            scannerContainer.style.display = 'none';
+            scannerOpen = false;
         }
 
         function showForm(formId) {
