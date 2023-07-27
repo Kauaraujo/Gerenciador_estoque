@@ -1,2 +1,2 @@
-web: gunicorn gerenciarEstoque:app
+web: gunicorn main:app
 
