@@ -27,12 +27,24 @@
             margin-top: 10px;
         }
 
-        #itens_list div {
-            margin-bottom: 5px;
+        #itens_list table {
+            width: 100%;
+            border-collapse: collapse;
         }
 
-        #gerar_csv_container {
-            margin-top: 20px;
+        #itens_list th,
+        #itens_list td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+
+        #itens_list th {
+            background-color: #f2f2f2;
+        }
+
+        #itens_list button {
+            margin-left: 10px;
         }
 
         /* Estilo para centralizar a câmera no contêiner */
@@ -54,9 +66,9 @@
 </head>
 <body>
     <div class="sidebar">
-        <a href="#" onclick="showForm('baixa_itens_form')">Baixa por itens</a>
-        <a href="#" onclick="showForm('baixa_kits_form')">Baixa de Kits</a>
-        <a href="#" onclick="showForm('cautela_ferramentas_form')">Cautela de Ferramentas</a>
+        <button onclick="showForm('baixa_itens_form')">Baixa por itens</button>
+        <button onclick="showForm('baixa_kits_form')">Baixa de Kits</button>
+        <button onclick="showForm('cautela_ferramentas_form')">Cautela de Ferramentas</button>
     </div>
 
     <div style="margin-left: 200px; padding: 20px;">
@@ -88,14 +100,25 @@
             <!-- Lista de Itens Adicionados -->
             <div class="itens-list-container">
                 <div class="form-title">Itens Adicionados</div>
-                <div id="itens_list" class="itens-list"></div>
+                <div id="itens_list" class="itens-list">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Descrição</th>
+                                <th>Quantidade</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="list-buttons">
+                    <button class="submit generate-csv" type="button" onclick="generateCSV()">Gerar CSV</button>
+                    <button class="submit clear-list" type="button" onclick="clearItemList()">Limpar Lista</button>
+                </div>
             </div>
-        </div>
 
-        <!-- Botão para Gerar CSV -->
-        <div class="form-container" id="gerar_csv_container" style="display: none;">
-            <button class="submit" type="button" onclick="generateCSV()">Gerar CSV</button>
-        </div>
 
         <!-- Contêiner para a Câmera -->
         <div id="scanner-container" style="display: none;"></div>
@@ -107,99 +130,150 @@
     </div>
 
     <script>
+        // ... (seu código JavaScript aqui)
+    </script>
+</body>
+
+    <script>
         let scannerInstance;
         let scannerOpen = false;
 
-        function fetchItemDescription() {
-            const codigo = document.getElementById("item_codigo").value;
+    function fetchItemDescription() {
+    const codigo = document.getElementById("item_codigo").value;
 
-            // Fazer a requisição para buscar a descrição do item pelo código
-            fetch("/buscar_descricao", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ codigo: codigo })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const descricao = data.descricao;
-                    document.getElementById("item_descricao").textContent = descricao;
-                } else {
-                    document.getElementById("item_descricao").textContent = "";
-                    alert("Código não encontrado.");
-                }
-            })
-            .catch(error => {
-                console.error("Erro na solicitação AJAX:", error);
-            });
+    // Fazer a requisição para buscar a descrição do item pelo código
+    fetch("/buscar_descricao", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ codigo: codigo })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const descricao = data.descricao;
+            document.getElementById("item_descricao").textContent = descricao; // Atualize a descrição aqui
+        } else {
+            document.getElementById("item_descricao").textContent = ""; // Limpar a descrição
+            alert("Código não encontrado.");
         }
+    })
+    .catch(error => {
+        console.error("Erro na solicitação AJAX:", error);
+    });
+}
 
         const itensList = [];
 
         function addItem() {
-            const codigo = document.getElementById("item_codigo").value;
-            const descricao = document.getElementById("item_descricao").textContent;
-            const quantidade = document.getElementById("item_quantidade").value;
+    const codigo = document.getElementById("item_codigo").value;
+    const descricao = document.getElementById("item_descricao").textContent;
+    const quantidade = document.getElementById("item_quantidade").value;
 
-            if (codigo.trim() === "" || descricao.trim() === "" || quantidade.trim() === "") {
-                alert("Por favor, preencha todos os campos.");
-                return;
-            }
+    if (codigo.trim() === "" || descricao.trim() === "" || quantidade.trim() === "") {
+        alert("Por favor, preencha todos os campos.");
+        return;
+    }
 
-            itensList.push({ codigo, descricao, quantidade });
-            showItensList();
+    const item = { codigo, descricao, quantidade };
+    itensList.push(item);
 
-            document.getElementById("item_codigo").value = "";
-            document.getElementById("item_descricao").textContent = "";
-            document.getElementById("item_quantidade").value = "";
+    showItensList(); // Atualiza a exibição da lista
+}
+
+function removeItem(item) {
+    const index = itensList.indexOf(item);
+    if (index !== -1) {
+        itensList.splice(index, 1); // Remover o item da lista
+        showItensList(); // Atualiza a exibição da lista
+    }
+}
+
+    function generateCSV() {
+        if (itensList.length === 0) {
+            alert("Nenhum item foi adicionado.");
+            return;
         }
 
-        function showItensList() {
-            const itensListContainer = document.querySelector(".itens-list-container");
-            itensListContainer.style.display = "block";
+        fetch("/gerar_csv", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ itensList: itensList }),  // Enviar a lista de itens correta
+        })
+        .then((response) => response.blob())
+        .then((blob) => {
+            const url = window.URL.createObjectURL(new Blob([blob]));
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "itens.csv";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        })
+        .catch((error) => {
+            console.error("Erro na solicitação AJAX:", error);
+        });
+    }
 
-            const itensListDiv = document.getElementById("itens_list");
-            itensListDiv.innerHTML = "";
+    function showItensList() {
+        const tableBody = document.querySelector("#itens_list tbody");
+        tableBody.innerHTML = ""; // Limpa o conteúdo da tabela
 
-            for (const item of itensList) {
-                const itemDiv = document.createElement("div");
-                itemDiv.textContent = `Código: ${item.codigo}, Descrição: ${item.descricao}, Quantidade: ${item.quantidade}`;
-                itensListDiv.appendChild(itemDiv);
-            }
+        for (const item of itensList) {
+            const newRow = tableBody.insertRow();
 
-            const gerarCsvContainer = document.getElementById("gerar_csv_container");
-            gerarCsvContainer.style.display = itensList.length > 0 ? "block" : "none";
+            const codigoCell = newRow.insertCell();
+            const descricaoCell = newRow.insertCell();
+            const quantidadeCell = newRow.insertCell();
+            const actionsCell = newRow.insertCell();
+
+            codigoCell.textContent = item.codigo;
+            descricaoCell.textContent = item.descricao;
+            quantidadeCell.textContent = item.quantidade;
+
+            const removeButton = document.createElement("button");
+            removeButton.textContent = "Remover";
+            removeButton.onclick = () => removeItem(item);
+            actionsCell.appendChild(removeButton);
         }
+
+        const gerarCsvContainer = document.getElementById("gerar_csv_container");
+        gerarCsvContainer.style.display = itensList.length > 0 ? "block" : "none";
+    }
+
 
         function generateCSV() {
-            if (itensList.length === 0) {
-                alert("Nenhum item foi adicionado.");
-                return;
-            }
+    console.log("itensList:", itensList);
 
-            fetch("/gerar_csv", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ itensList: itensList }),
-            })
-            .then((response) => response.blob())
-            .then((blob) => {
-                const url = window.URL.createObjectURL(new Blob([blob]));
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "itens.csv";
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-            })
-            .catch((error) => {
-                console.error("Erro na solicitação AJAX:", error);
-            });
-        }
+    if (itensList.length === 0) {
+        alert("Nenhum item foi adicionado.");
+        return;
+    }
+
+    fetch("/gerar_csv", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ itensList: itensList }),  // Enviar a lista de itens correta
+    })
+    .then((response) => response.blob())
+    .then((blob) => {
+        const url = window.URL.createObjectURL(new Blob([blob]));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "itens.csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    })
+    .catch((error) => {
+        console.error("Erro na solicitação AJAX:", error);
+    });
+}
 
         function toggleCamera() {
             if (scannerOpen) {
@@ -268,6 +342,43 @@
             const currentButton = document.querySelector(`[onclick="showForm('${formId}')"]`);
             currentButton.classList.add("active");
         }
+
+        function clearItemList() {
+        itensList.length = 0; // Limpar a lista inteira
+        showItensList();
+    }
+
+    function removeItem(item) {
+        const index = itensList.indexOf(item);
+        if (index !== -1) {
+            itensList.splice(index, 1); // Remover o item da lista
+            showItensList();
+        }
+    }
+
+    function showItensList() {
+        const itensListContainer = document.querySelector(".itens-list-container");
+        itensListContainer.style.display = "block";
+
+        const itensListDiv = document.getElementById("itens_list");
+        itensListDiv.innerHTML = "";
+
+        for (const item of itensList) {
+            const itemDiv = document.createElement("div");
+            itemDiv.textContent = `Código: ${item.codigo}, Descrição: ${item.descricao}, Quantidade: ${item.quantidade}`;
+
+            const removeButton = document.createElement("button");
+            removeButton.textContent = "Remover";
+            removeButton.onclick = () => removeItem(item);
+            itemDiv.appendChild(removeButton); // Adiciona o botão de remoção ao lado do item
+
+            itensListDiv.appendChild(itemDiv);
+        }
+
+        const gerarCsvContainer = document.getElementById("gerar_csv_container");
+        gerarCsvContainer.style.display = itensList.length > 0 ? "block" : "none";
+    }
+
     </script>
 </body>
 </html>

@@ -1,20 +1,67 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, json
-import mysql.connector
-import hashlib
 import csv
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, json
+import hashlib
+import os
 
 app = Flask(__name__)
 
 itensList = []
+users = []
+insumos_descricoes = {}  # Dicionário para armazenar códigos e descrições dos itens
 
-# Configurações do banco de dados
-db = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="aa362514",
-    database="my_db"
-)
-cursor = db.cursor()
+
+def carregar_usuarios():
+    global users
+    try:
+        with open('modulos/login.csv', 'r', newline='', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            next(reader)  # Pular o cabeçalho
+
+            for row in reader:
+                if len(row) >= 4:
+                    nome, sobrenome, email, senha = row
+                    user = {"nome": nome, "sobrenome": sobrenome, "email": email, "senha": senha}
+                    users.append(user)
+                else:
+                    print(f"A linha não possui dados suficientes: {row}")
+    except FileNotFoundError:
+        users = []
+
+
+# Chame a função para carregar os usuários
+carregar_usuarios()
+
+
+print("Usuários carregados:", users)
+
+
+def create_user(nome, sobrenome, email, senha):
+    senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+    user = {"nome": nome, "sobrenome": sobrenome, "email": email, "senha": senha_hash}
+
+    # Verificar se o arquivo existe
+    file_exists = os.path.isfile('modulos/login.csv')
+
+    # Adicionar o novo usuário ao arquivo login.csv
+    with open('modulos/login.csv', 'a', newline='', encoding='utf-8') as csvfile:
+        fieldnames = ['nome', 'sobrenome', 'email', 'senha']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        if not file_exists:
+            writer.writeheader()  # Se o arquivo não existir, escreva o cabeçalho
+
+        writer.writerow(user)
+    users.append(user)  # Adicionar o usuário à lista de usuários em memória
+
+
+def criar_dicionario_de_insumos():
+    global insumos_descricoes
+    with open('modulos/dados.csv', newline='', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)  # Pular a primeira linha
+        for row in reader:
+            codigo, descricao = map(str.strip, row[0].split('-'))
+            insumos_descricoes[int(codigo)] = descricao
 
 
 @app.route('/home', methods=['GET', 'POST'])
@@ -24,16 +71,13 @@ def home():
         codigo = request.form['item_codigo']
         quantidade = request.form['item_quantidade']
 
-        # Validar se todos os campos foram preenchidos
         if codigo.strip() == "" or quantidade.strip() == "":
             error_msg = "Por favor, preencha todos os campos."
             return render_template('index.html', error=error_msg, itensList=itensList)
 
-        # Aqui, não precisamos mais buscar a descrição usando 'request.form'
-        # porque a descrição é buscada através da requisição AJAX no front-end.
+        descricao = insumos_descricoes.get(int(codigo), "")  # Obter a descrição do dicionário
 
-        # Adicionar o item à lista global de itens
-        item = {"codigo": codigo, "descricao": "", "quantidade": quantidade}
+        item = {"codigo": codigo, "descricao": descricao, "quantidade": quantidade}
         itensList.append(item)
 
     return render_template('index.html', itensList=itensList)
@@ -45,35 +89,16 @@ def login():
         email = request.form['email']
         senha = request.form['senha']
 
-        # Conecte-se ao banco de dados MySQL
-        db = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="aa362514",
-            database="my_db"
-        )
-        cursor = db.cursor()
+        senha_hash_digitada = hashlib.sha256(senha.encode()).hexdigest()
 
-        # Execute a consulta SELECT usando o objeto de cursor
-        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
-        result = cursor.fetchone()
+        with open('modulos/login.csv', 'r', newline='', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            next(reader)  # Pular o cabeçalho
+            for row in reader:
+                nome, sobrenome, email_csv, senha_csv = row
+                if email_csv == email and senha_csv == senha_hash_digitada:
+                    return redirect(url_for('home'))
 
-        # Feche o objeto de cursor e a conexão com o banco de dados
-        cursor.close()
-        db.close()
-
-        if result:
-            # Obtenha a senha armazenada no banco de dados
-            senha_hash_banco = result[4]  # A coluna de senha está na posição 4
-
-            # Hash da senha digitada pelo usuário
-            senha_hash_digitada = hashlib.sha256(senha.encode()).hexdigest()
-
-            if senha_hash_banco == senha_hash_digitada:
-                # Login bem-sucedido
-                return redirect(url_for('home'))
-
-        # Credenciais inválidas, renderiza a página de login novamente com uma mensagem de erro
         error_msg = 'Credenciais inválidas. Verifique seu e-mail e senha.'
         return render_template('login.html', error=error_msg)
 
@@ -88,26 +113,7 @@ def register():
         email = request.form['email']
         senha = request.form['senha']
 
-        # Hash da senha antes de armazená-la no banco de dados
-        senha_hash = hashlib.sha256(senha.encode()).hexdigest()
-
-        # Conecte-se ao banco de dados MySQL
-        db = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="aa362514",
-            database="my_db"
-        )
-        cursor = db.cursor()
-
-        # Execute a inserção na tabela de usuários
-        cursor.execute("INSERT INTO users (nome, sobrenome, email, senha) VALUES (%s, %s, %s, %s)",
-                       (nome, sobrenome, email, senha_hash))
-        db.commit()
-
-        # Feche o objeto de cursor e a conexão com o banco de dados
-        cursor.close()
-        db.close()
+        create_user(nome, sobrenome, email, senha)
 
         return redirect(url_for('home', success='Cadastro realizado com sucesso'))
 
@@ -122,22 +128,12 @@ def adicionar_item():
         descricao = data.get('descricao')
         quantidade = data.get('quantidade')
 
-        # Carrega a lista de itens já adicionados anteriormente
-        itens_list = request.cookies.get('itens_list', '[]')
-        itens_list = json.loads(itens_list)
-
-        # Verifica se o item já foi adicionado à lista
-        for item in itens_list:
+        for item in itensList:
             if item['codigo'] == codigo:
                 return jsonify({"success": False, "message": "Item já adicionado à lista."})
 
-        # Adiciona o item à lista
-        itens_list.append({"codigo": codigo, "descricao": descricao, "quantidade": quantidade})
-
-        # Armazena a lista atualizada na resposta do cookie
+        itensList.append({"codigo": codigo, "descricao": descricao, "quantidade": quantidade})
         response = jsonify({"success": True})
-        response.set_cookie('itens_list', json.dumps(itens_list))
-
         return response
 
 
@@ -147,28 +143,12 @@ def buscar_descricao():
         data = request.get_json()
         codigo = data.get('codigo')
 
-        # Conecte-se ao banco de dados MySQL
-        db = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="aa362514",  # <-- Insira a senha do seu banco de dados
-            database="my_db"
-        )
-        cursor = db.cursor()
+        descricao = insumos_descricoes.get(int(codigo))
 
-        # Execute a consulta SELECT usando o objeto de cursor
-        cursor.execute("SELECT descricao FROM itens WHERE codigo = %s", (codigo,))
-        result = cursor.fetchone()
-
-        # Feche o objeto de cursor e a conexão com o banco de dados
-        cursor.close()
-        db.close()
-
-        if result:
-            descricao = result[0]
+        if descricao:
             return jsonify({"success": True, "descricao": descricao})
         else:
-            return jsonify({"success": False})
+            return jsonify({"success": False, "descricao": "Código não encontrado."})
 
 
 @app.route('/gerar_csv', methods=['POST'])
@@ -196,4 +176,5 @@ def gerar_csv():
 
 
 if __name__ == '__main__':
+    criar_dicionario_de_insumos()  # Chamar a função para criar o dicionário de descrições
     app.run(debug=True)
